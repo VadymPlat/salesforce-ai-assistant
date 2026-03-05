@@ -1,0 +1,126 @@
+SALESFORCE FUNDAMENTALS
+=======================
+
+What is Salesforce?
+-------------------
+Salesforce is a cloud-based Customer Relationship Management (CRM) platform that helps businesses manage their sales, service, marketing, and more — all in one place. It was founded in 1999 and is one of the world's most widely-used CRM platforms.
+
+Core Clouds
+-----------
+- Sales Cloud: Manage leads, opportunities, accounts, and the sales pipeline. Features include opportunity tracking, forecasting, and automation with flows and workflows.
+- Service Cloud: Manage customer support cases, knowledge bases, and omni-channel service. Includes Einstein bots and service consoles.
+- Marketing Cloud: Send targeted email campaigns, manage customer journeys, and analyze marketing performance.
+- Experience Cloud (formerly Community Cloud): Build branded portals and communities for customers, partners, and employees.
+- Commerce Cloud: Build B2B and B2C e-commerce experiences.
+- Analytics Cloud (Tableau CRM): Powerful dashboards and AI-driven insights.
+
+Key Objects
+-----------
+Salesforce organizes data into "objects" (similar to database tables):
+- Account: A company or organization you do business with.
+- Contact: An individual person, typically linked to an Account.
+- Lead: A potential customer who has expressed interest.
+- Opportunity: A sales deal in progress, linked to an Account.
+- Case: A customer issue or support request.
+- Task / Event: Activities like calls, meetings, or to-dos.
+
+Custom objects can be created to store any business-specific data.
+
+SOQL - Salesforce Object Query Language
+---------------------------------------
+SOQL is similar to SQL and is used to query Salesforce data. Example:
+  SELECT Id, Name, Amount, CloseDate FROM Opportunity WHERE StageName = 'Closed Won'
+
+Key SOQL rules:
+- Always specify which fields you want (no SELECT *)
+- Use WHERE clauses to filter records
+- Use ORDER BY to sort and LIMIT to cap results
+- Relationships can be traversed: SELECT Name, Account.Name FROM Contact
+
+Apex - Salesforce's Programming Language
+-----------------------------------------
+Apex is a strongly-typed, object-oriented programming language that runs on Salesforce servers. It is similar in syntax to Java.
+
+Example Apex class:
+  public class OpportunityHelper {
+      public static void updateStage(Id oppId, String stage) {
+          Opportunity opp = [SELECT Id FROM Opportunity WHERE Id = :oppId];
+          opp.StageName = stage;
+          update opp;
+      }
+  }
+
+Apex is used for:
+- Triggers (code that fires on DML events like insert/update/delete)
+- Batch jobs (process large data volumes asynchronously)
+- Future methods (async callouts to external APIs)
+- REST/SOAP web services
+
+Salesforce Flows (Declarative Automation)
+-----------------------------------------
+Flows are point-and-click automation tools that don't require code:
+- Screen Flows: Guide users through a step-by-step process in the UI.
+- Record-Triggered Flows: Fire when a record is created, updated, or deleted.
+- Scheduled Flows: Run on a defined schedule.
+- Platform Event-Triggered Flows: Fire when a platform event occurs.
+
+Flows have largely replaced Workflow Rules and Process Builder.
+
+Salesforce REST API
+-------------------
+Salesforce provides a powerful REST API for integrating with external systems.
+
+Base URL format:
+  https://{your-instance}.salesforce.com/services/data/v{version}/
+
+Common endpoints:
+- GET  /sobjects/{ObjectName}/{id}       — retrieve a single record
+- POST /sobjects/{ObjectName}/           — create a record
+- PATCH /sobjects/{ObjectName}/{id}      — update a record
+- DELETE /sobjects/{ObjectName}/{id}     — delete a record
+- GET  /query?q={SOQL}                  — run a SOQL query
+
+Authentication uses OAuth 2.0. You must obtain an access token before making API calls.
+
+Roles, Profiles, and Permissions
+----------------------------------
+- Profile: Controls what a user can see and do by default (object/field access, app visibility).
+- Permission Set: Grants additional permissions on top of a profile without changing the profile.
+- Role: Defines the data access hierarchy (who can see whose records via record ownership).
+- Sharing Rules: Extend sharing beyond role hierarchy for specific groups.
+
+Governor Limits
+---------------
+Because Salesforce is a multi-tenant platform, it enforces governor limits to ensure fair resource usage:
+- SOQL queries per transaction: 100
+- DML statements per transaction: 150
+- Callouts per transaction: 100
+- CPU time per transaction: 10,000 ms (synchronous)
+- Heap size: 6 MB (synchronous)
+
+Always bulkify your Apex code (handle lists of records, not one at a time) to stay within limits.
+
+Lightning Web Components (LWC)
+-------------------------------
+LWC is Salesforce's modern framework for building UI components using standard HTML, CSS, and JavaScript. Components can be placed on record pages, app pages, and experience sites.
+
+Example LWC structure:
+  myComponent/
+    myComponent.html    — template
+    myComponent.js      — controller
+    myComponent.css     — styles
+    myComponent.js-meta.xml — metadata
+
+LWC replaced the older Aura (Lightning) component framework for most new development.
+
+Sandboxes and Deployment
+-------------------------
+Salesforce uses sandboxes (copies of your org) for development and testing:
+- Developer Sandbox: Small, for development. Refreshed once per day.
+- Partial Copy Sandbox: Includes a subset of production data.
+- Full Sandbox: Complete copy of production. Refreshed once every 29 days.
+
+Deployment tools:
+- Change Sets: Point-and-click deployment between related orgs.
+- Salesforce CLI (sf): Command-line tool for metadata deployment.
+- CI/CD Pipelines: GitHub Actions, Jenkins, etc. integrated with Salesforce CLI.

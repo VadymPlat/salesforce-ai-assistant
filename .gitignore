@@ -1,0 +1,20 @@
+# Environment variables (never commit your API key!)
+.env
+
+# ChromaDB persisted vector store
+vectorstore/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
