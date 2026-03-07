@@ -1,0 +1,263 @@
+SALESFORCE DATA MODEL
+======================
+
+The Salesforce data model is built around objects (like database tables), fields (columns), and relationships (foreign keys). Understanding how to design your data model well is one of the most critical skills in Salesforce architecture — a poor data model is very expensive to fix later.
+
+
+STANDARD VS CUSTOM OBJECTS
+----------------------------
+
+Standard Objects:
+Standard objects are provided by Salesforce out of the box and map to core CRM concepts. They include built-in functionality, reports, and integrations.
+
+Commonly used standard objects:
+- Account: Companies or organisations you do business with
+- Contact: Individual people, usually linked to an Account
+- Lead: Unqualified prospects not yet associated with an Account
+- Opportunity: Sales deals in progress, linked to an Account
+- Case: Customer service requests or issues
+- Task / Event: Activities like calls, meetings, emails, to-dos
+- Campaign: Marketing campaigns with associated Campaign Members
+- Product2: Products in your product catalogue
+- Pricebook2: Price books containing product prices
+- Quote: Formal price quotes linked to Opportunities
+- Contract: Formal agreements linked to Accounts
+- Order: Orders placed by customers
+- User: Salesforce users (internal)
+
+Standard objects cannot be deleted, but most can be renamed (e.g., "Account" can be relabeled "Client" in the UI without changing the API name).
+
+Custom Objects:
+Custom objects store business-specific data that standard objects don't cover. They are fully configurable.
+
+Examples:
+- Project__c: Tracking internal projects
+- Invoice__c: Custom invoice records
+- Training_Session__c: Employee training sessions
+- Store_Location__c: Physical retail locations
+
+Naming convention: Custom objects have an "__c" suffix in their API name (e.g., My_Object__c). This suffix is appended automatically by Salesforce — you just provide the label and object name.
+
+When to create a custom object vs using an existing one:
+- Use a custom object when the data has its own lifecycle, needs its own records, and will be related to multiple other objects
+- Do NOT create a custom object just to store a few extra fields — use custom fields on a standard object instead
+- Avoid "frankenstein" objects (putting unrelated data on one object to avoid creating new ones)
+
+
+FIELD TYPES AND WHEN TO USE EACH
+----------------------------------
+
+Text Fields:
+- Text (max 255 chars): Short labels, names, codes. Most common field type.
+- Text Area: Up to 255 chars with line breaks. For short notes.
+- Long Text Area: Up to 131,072 chars. For detailed descriptions, notes, comments.
+- Rich Text Area: Formatted text with HTML (bold, bullets, links). For content displayed in UI. Note: not easily searchable or reportable.
+- Text (Encrypted): Masked display for sensitive data. Limited filter/sort capability.
+
+Number Fields:
+- Number: Whole or decimal numbers. Specify decimal places (0 for integers).
+- Currency: Monetary values. Respects org currency settings and multi-currency.
+- Percent: Stores as a decimal (50% stored as 50), displays with % symbol.
+
+Date and Time:
+- Date: Calendar date only (no time). Use for birthdays, due dates, close dates.
+- Date/Time: Specific point in time. Stored in UTC, displayed in user's time zone.
+- Time: Time of day only (rare use case).
+
+Boolean:
+- Checkbox: True/False. Cannot be null — always has a value. Use for binary flags.
+
+Picklist Fields:
+- Picklist: Single-value dropdown from a defined list. Most common for controlled vocabulary.
+- Multi-Select Picklist: Multiple values selected. Use sparingly — difficult to report on and filter. Consider a related junction object for complex multi-value scenarios.
+- Picklist (Global Value Set): Picklist values shared across multiple objects/fields. Use when the same set of values (e.g., countries, stages) appears on multiple objects.
+
+Relationship Fields:
+- Lookup: Optional relationship to another record. Behaves like a foreign key. Deleting the parent does not affect the child.
+- Master-Detail: Mandatory relationship. Child cannot exist without parent. Deleting parent deletes children (cascade delete). Enables roll-up summary fields.
+- External Lookup: Lookup to an external object (Salesforce Connect).
+- Indirect Lookup: Lookup from external object to standard/custom object using an External ID field.
+- Hierarchical Lookup: Self-lookup on User object only. Used for Manager field.
+
+Special Fields:
+- Formula: Read-only calculated field. Value computed at runtime — not stored. Use for derived values (e.g., Days Since Last Activity, Profit Margin %).
+- Roll-Up Summary: Only available on Master side of a Master-Detail. Aggregates child values (COUNT, SUM, MIN, MAX). Calculated when child records change.
+- Auto Number: Auto-incrementing unique identifier (e.g., CASE-0001, CASE-0002).
+- URL: Stores a URL, rendered as a clickable link.
+- Email: Stores an email address, rendered as a mailto link.
+- Phone: Stores a phone number with formatting.
+- Geolocation: Stores latitude/longitude. Useful for mapping and distance calculations in SOQL.
+
+Field Design Best Practices:
+- Choose the most restrictive type that fits the data (Picklist > Text when values are controlled)
+- Avoid Multi-Select Picklist when possible — it causes reporting headaches
+- Use Currency fields for money (not Number) to support multi-currency orgs
+- Add a Description to every field explaining its business purpose
+- Set Help Text on fields that might confuse users
+- Use "Required" sparingly — required fields block record creation; consider using validation rules for conditional requirements instead
+- Prefix custom field labels clearly when they serve a specific team (e.g., "Finance: Billing Code" vs just "Billing Code")
+
+
+OBJECT RELATIONSHIPS
+---------------------
+
+Lookup Relationships:
+A Lookup creates a loosely coupled relationship between two objects.
+
+Characteristics:
+- The child record can exist without a parent (the lookup field is optional unless made required)
+- Deleting the parent does NOT delete the child (the lookup field is cleared or the delete is blocked, depending on configuration)
+- No roll-up summary fields
+- Child records do not inherit the parent's sharing settings
+
+Use Lookup when:
+- The child record can meaningfully exist without a parent
+- You need flexibility in reassigning or removing the parent
+- Example: Contact → Account (a Contact can exist without an Account)
+
+Master-Detail Relationships:
+A Master-Detail creates a tightly coupled, ownership-based relationship.
+
+Characteristics:
+- The Detail (child) record cannot exist without the Master (parent) — the relationship field is required and cannot be changed after creation
+- Deleting the Master cascades and deletes all Detail records
+- The Detail record inherits the Master's sharing settings — the Detail's OWD is "Controlled by Parent"
+- Roll-up Summary fields can be created on the Master to aggregate values from Detail records
+- The Detail record's owner is automatically the Master record's owner
+
+Use Master-Detail when:
+- The child record has no meaning without the parent
+- You need roll-up summaries
+- Example: Opportunity Line Item → Opportunity (a line item is meaningless without the opportunity)
+
+Limits:
+- Each object can have up to 2 Master-Detail relationships
+- Each object can have up to 40 Lookup relationships
+- An object cannot be the Detail of more than 2 Masters
+
+Many-to-Many Relationships (Junction Objects):
+Salesforce does not have a native many-to-many field type. Instead, create a junction object with two Master-Detail relationships to the two objects you want to relate.
+
+Example: Contacts can attend many Events, and Events can have many Contacts.
+Solution: Create "Event_Attendee__c" with:
+  - Master-Detail to Contact
+  - Master-Detail to Event
+  - Additional fields: RSVP_Status__c, Check_In_Time__c
+
+This pattern gives you full control over the relationship data and supports roll-ups and reporting.
+
+Self-Relationships (Hierarchical):
+An object can have a lookup to itself, creating a hierarchical structure. The User object uses this for the Manager field. Custom objects can use self-lookups for parent-child hierarchies (e.g., Category → Parent Category).
+
+
+SCHEMA DESIGN BEST PRACTICES
+------------------------------
+
+1. Model data around business processes, not org charts.
+   Think about how data flows through your business, not how your company is structured.
+
+2. Use standard objects before creating custom ones.
+   Salesforce's built-in objects have deep platform support (reports, Einstein, integrations). Only create custom objects when no standard object fits.
+
+3. Avoid storing the same data in multiple places.
+   If you have Opportunity Amount on the Opportunity and also synced to the Account's "Total Pipeline" field, you now have two sources of truth. Use Roll-Up Summaries or Formula fields for derived values.
+
+4. Plan for reporting early.
+   Every field you add should have a clear answer to "how will this be reported on?" Multi-select picklists, rich text, and formula fields can make reporting difficult.
+
+5. Limit object relationships.
+   Deep chains of lookups (A → B → C → D) make SOQL complex and can hit query limits. Keep relationship depth to 3–4 levels maximum.
+
+6. Document your schema.
+   Use field Descriptions (visible in Setup) and a separate data dictionary spreadsheet. Future admins will thank you.
+
+7. Think about data volume from day one.
+   If an object will have millions of records, index the fields used in WHERE clauses. Avoid formula fields on high-volume objects as they add to SOQL query time.
+
+
+RECORD TYPES
+-------------
+
+Record Types allow you to offer different picklist values, page layouts, and business processes to different users on the same object.
+
+Common use cases:
+- Account: "Business Account" and "Person Account" record types
+- Case: "Technical Support" and "Billing Inquiry" with different fields and processes
+- Opportunity: "New Business" and "Renewal" with different stage picklist values
+
+What Record Types control:
+- Which page layout is assigned to users of this record type
+- Which picklist values are available (a subset of all values on the object)
+- Which "business process" applies (for Cases, Leads, and Opportunities — controls the stage/status picklist)
+- Which record type a user can create (assigned via Profile or Permission Set)
+
+Record Types vs Page Layouts:
+- A Page Layout defines which fields appear on the screen and in what order
+- A Record Type determines WHICH page layout a user sees (the mapping is Profile + Record Type → Page Layout)
+- One Record Type can show different layouts to different profiles
+- Multiple Record Types can share the same page layout
+
+Best Practices:
+- Don't create Record Types just for page layout differences — use Dynamic Forms (Lightning) instead, which show/hide fields based on conditions without needing multiple record types
+- Use Record Types when picklist values genuinely differ between use cases
+- Keep the number of record types manageable — each new one multiplies the page layout assignment matrix
+
+
+EXTERNAL IDS AND UPSERT PATTERNS
+----------------------------------
+
+External ID Fields:
+An External ID is a custom field marked as an External ID, which means:
+- It is indexed for fast lookup
+- It can be used in upsert operations
+- It can be used as a relationship reference in Data Loader (matching by external ID instead of Salesforce ID)
+
+Only certain field types can be External IDs: Text, Number, Email, Auto Number.
+
+Each object can have up to 7 External ID fields.
+
+Upsert:
+The upsert DML operation (update + insert) either updates an existing record or inserts a new one, based on a matching field (usually an External ID).
+
+Example use case:
+Your ERP system syncs accounts to Salesforce daily. Using upsert on "ERP_Account_ID__c":
+- If a record with that ERP ID exists → update it
+- If not → create a new Account
+
+In Apex:
+  Database.upsert(accountList, Account.ERP_Account_ID__c, false);
+
+In Data Loader: choose Upsert operation and map the External ID field.
+
+Best Practices:
+- Always define an External ID on any object that will be loaded from external systems
+- Use the Salesforce ID as the External ID when re-importing Salesforce data (e.g., after sandbox refresh)
+- Ensure External ID values are truly unique in your source system
+
+
+LARGE DATA VOLUME (LDV) CONSIDERATIONS
+----------------------------------------
+
+Salesforce performs well at scale, but certain design choices become critical when an object has millions of records.
+
+Indexing:
+Salesforce automatically indexes: Id, Name, OwnerId, CreatedDate, SystemModstamp, RecordTypeId, Master-Detail fields, and External ID fields.
+For custom fields used frequently in WHERE clauses, submit a case to Salesforce Support to request a custom index.
+
+Skinny Tables:
+For very high-volume objects, Salesforce Support can create "skinny tables" — a subset of frequently queried fields stored separately for faster reads. Must be requested via Support.
+
+Avoid Cross-Object Formulas on High-Volume Objects:
+Formula fields that traverse relationships (e.g., Opportunity.Account.Industry) add join overhead to every query that touches those records.
+
+Avoid Roll-Up Summaries with Complex Criteria:
+Roll-up summaries with WHERE conditions recalculate whenever a child record changes, which can cause locking and performance issues at high volume.
+
+SOQL Selective Queries:
+A query is "selective" if its filters use indexed fields and narrow results to less than ~10% of the object's records (for objects under 1M records) or less than ~5% for larger objects. Non-selective queries time out or fail in production.
+
+Data Archiving:
+For objects that accumulate large volumes of historical data (e.g., Logs, Events, Completed Cases), plan an archiving strategy: either export and delete old records, move them to an external data warehouse, or use Salesforce's Big Objects for high-scale archival storage.
+
+Skinny Objects / Big Objects:
+Salesforce Big Objects store hundreds of billions of records at extremely high volume. They support a limited query model (no ad-hoc SOQL) but are excellent for audit logs, historical data, and time-series data.

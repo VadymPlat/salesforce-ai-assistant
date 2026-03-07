@@ -1,0 +1,375 @@
+SALESFORCE AUTOMATION
+======================
+
+Salesforce provides several tools for automating business processes — from simple field updates to complex multi-step workflows. Choosing the right tool is critical: using the wrong one leads to unmaintainable code, governor limit issues, or performance problems at scale.
+
+The automation tools, from declarative (no code) to programmatic (code required):
+  1. Flows (Screen, Record-Triggered, Scheduled, Platform Event-Triggered, Autolaunched)
+  2. Approval Processes
+  3. Process Builder (legacy — largely replaced by Flow)
+  4. Workflow Rules (legacy — replaced by Flow)
+  5. Apex Triggers
+  6. Apex Classes (called from triggers, flows, or platform events)
+
+
+FLOW TYPES
+-----------
+
+Flow Builder is Salesforce's primary declarative automation tool. It replaced Process Builder and Workflow Rules and is now the recommended approach for most automation scenarios that don't require Apex.
+
+1. Screen Flow:
+   A user-facing, step-by-step guided process with screens, input fields, and decisions.
+
+   Triggered by: User action (button click, embedded component, quick action, utility bar)
+
+   Use cases:
+   - Multi-step data entry wizards (e.g., "Create New Project" guided form)
+   - Guided troubleshooting processes for service agents
+   - Customer-facing forms on Experience Cloud sites
+   - Replace complex multi-page Visualforce forms
+
+   Key elements: Screen components (input fields, radio buttons, tables), Decision elements, Loops, Subflows
+
+2. Record-Triggered Flow (formerly called Fast Field Update / Before-Save, and After-Save flows):
+   Automatically runs when a record is created, updated, or deleted.
+
+   Before-Save Record-Triggered Flow:
+   - Runs before the record is written to the database
+   - Can update fields on the triggering record without a DML statement (very efficient)
+   - Cannot create, update, or delete other records
+   - Runs before validation rules — use this for data normalization
+   - Much faster than After-Save flows for simple field updates
+
+   After-Save Record-Triggered Flow:
+   - Runs after the record is saved to the database
+   - Can create, update, or delete related records
+   - Can call Apex, send emails, post to Chatter
+   - Use for cross-object updates and integrations
+
+   Use cases for Record-Triggered Flows:
+   - Update a field on the same record based on another field's value (Before-Save)
+   - Create a related Task when an Opportunity is marked "Closed Won" (After-Save)
+   - Send an email notification when a Case is created (After-Save)
+   - Sync data to a related record when a field changes (After-Save)
+
+   Entry Conditions: You can specify conditions that must be true for the flow to run (e.g., "only when Status changes to 'Escalated'"). Always use conditions to avoid unnecessary executions.
+
+   "Run Once" vs "Run Every Time":
+   When a flow is set to run when a record is updated, you can configure it to run:
+   - Every time the record is saved (can cause recursive issues if the flow updates the same record)
+   - Only when the record is first created OR when conditions are newly met (prevents unnecessary re-runs)
+
+3. Scheduled Flow (Schedule-Triggered Flow):
+   Runs on a defined schedule, processing a batch of records.
+
+   Triggered by: A time schedule (daily, weekly, monthly, or specific date/time)
+
+   Use cases:
+   - Daily reminder emails for overdue Tasks
+   - Weekly data quality checks (flag records missing required fields)
+   - Monthly rollup calculations that don't need real-time updates
+   - Archive or clean up old records on a schedule
+
+   Note: Scheduled flows run in batches. Each batch processes up to 200 records. Governor limits apply per batch transaction.
+
+4. Platform Event-Triggered Flow:
+   Fires when a Platform Event message is published.
+
+   Triggered by: A Platform Event being published (from Apex, another Flow, an API call, or an external system)
+
+   Use cases:
+   - React to messages from external systems (IoT devices, ERP, marketing tools)
+   - Decouple complex processes — publish an event when something happens, and let a separate flow react
+   - Create an audit trail by publishing events that flows process asynchronously
+
+   Platform Events are the backbone of Salesforce's event-driven architecture and are essential for building loosely coupled integrations.
+
+5. Autolaunched Flow (No UI):
+   A flow with no Screen elements. It runs entirely in the background and is called programmatically.
+
+   Can be invoked from: Apex code, another Flow (as a Subflow), a REST API call, a Process Builder action (legacy)
+
+   Use cases:
+   - Shared business logic that multiple triggers, flows, or processes need to call
+   - Complex calculations or multi-step operations called from Apex
+   - Utility flows that other flows invoke as subflows
+
+
+FLOW BEST PRACTICES AND GOVERNOR LIMITS
+-----------------------------------------
+
+Governor Limits in Flows:
+Flows run within Salesforce's transaction governor limits, the same limits that apply to Apex:
+- 100 SOQL queries per transaction
+- 150 DML operations per transaction
+- 50,000 records returned from SOQL
+- 10,000 records processed by a single DML operation
+
+Bulkification:
+Flows are automatically bulkified for Record-Triggered Flows — when 200 records are updated at once (e.g., via Data Loader), the flow runs once per batch of 200, not 200 individual times. However, poorly designed flows can still hit limits:
+
+Anti-pattern (causes governor limit errors):
+  Loop → Get Records (SOQL inside loop) → Update Records (DML inside loop)
+
+Best pattern:
+  Get Records (SOQL outside loop, get all related records at once)
+  → Loop through records in memory
+  → Collect records to update in a collection variable
+  → Update Records (single DML outside loop)
+
+Flow Best Practices:
+- Never put SOQL queries or DML statements inside loops
+- Use collection variables and the "Add to Collection" element to batch records, then do one DML operation after the loop
+- Keep flows focused on a single purpose — avoid "mega flows" that handle dozens of scenarios
+- Use Subflows to share logic across multiple parent flows
+- Always add Fault connectors to handle errors gracefully (flows that fail silently are a support nightmare)
+- Add descriptions to every element explaining what it does and why
+- Use Before-Save flows instead of After-Save flows whenever the action is limited to the triggering record — it's faster and uses no DML limit
+- Test flows with large data volumes in a sandbox before deploying (Data Loader + bulk update)
+- Use Flow Interview logs in Setup to debug flow failures
+
+Flow Entry Conditions:
+Always configure entry conditions (the "Run the flow" conditions). Without them, the flow runs on every save, wasting resources. Example: "Only run when Opportunity Stage changes to 'Closed Won'"
+
+Recursion Prevention:
+After-Save flows that update the triggering record will re-trigger themselves. Prevent infinite loops by:
+- Setting entry conditions to "Only when record is first created" or "Only when record meets conditions for the first time"
+- Using a checkbox field ("Flow_Has_Run__c") to track whether the flow has already processed a record
+
+
+WHEN TO USE FLOW VS APEX
+--------------------------
+
+Use Flow when:
+- The logic can be expressed declaratively (no complex algorithms)
+- The process is simple to moderate in complexity
+- Business users may need to maintain it in the future
+- The process runs on record creation/update, on a schedule, or is user-triggered
+- Speed of delivery is more important than raw performance
+
+Use Apex when:
+- The logic is too complex for Flow (nested conditions, complex string manipulation, intricate data transformations)
+- You need to make external HTTP callouts (Apex @future or Queueable for async callouts)
+- You need precise control over transaction boundaries and error handling
+- The process needs to handle very large data volumes efficiently (Batch Apex)
+- You need to run logic asynchronously with retry capability (Queueable Apex)
+- The operation requires complex error handling with rollback capability (Database.Savepoint)
+- You need to enforce complex validation logic that involves multiple related records
+
+Decision Guide:
+  1. Can it be done in Flow? → Use Flow
+  2. Is the logic too complex for Flow? → Use Apex invoked from Flow (Apex Action)
+  3. Does it need to run on record save with maximum performance? → Apex Trigger (Before)
+  4. Does it need complex async processing? → Apex Queueable or Batch
+
+The best architectures often mix both: an Apex Trigger handles fast, synchronous field defaults; a Record-Triggered Flow handles cross-object updates; and an Apex Queueable handles async API callouts.
+
+
+APEX TRIGGERS
+--------------
+
+An Apex Trigger is code that executes automatically before or after specific DML events on a Salesforce object.
+
+Trigger Events:
+- before insert: Record is about to be inserted (record not yet in DB)
+- before update: Record is about to be updated
+- before delete: Record is about to be deleted
+- after insert: Record has been inserted and has an Id
+- after update: Record has been updated
+- after delete: Record has been deleted
+- after undelete: Record has been restored from the recycle bin
+
+Context Variables in Triggers:
+- Trigger.new: List of new versions of records (insert, update)
+- Trigger.old: List of old versions of records (update, delete)
+- Trigger.newMap: Map of Id → new record (insert, update)
+- Trigger.oldMap: Map of Id → old record (update, delete)
+- Trigger.isInsert / Trigger.isUpdate / Trigger.isDelete: Boolean context checks
+- Trigger.isBefore / Trigger.isAfter: Boolean context checks
+
+Before vs After Triggers:
+Before triggers:
+- Run before the record is written to the database
+- Can modify fields on Trigger.new directly without a DML statement (no DML limit used)
+- Use for field defaulting, normalization, validation, and computed field values
+- The record has no Id yet during before insert
+
+After triggers:
+- Run after the record is in the database (Trigger.new records have Ids)
+- Use for creating, updating, or deleting related records
+- Use for callouts to external systems (must be async — @future or Queueable)
+
+The One Trigger Per Object Pattern:
+Best practice is to have exactly ONE trigger per object, with all logic delegated to a handler class. This prevents ordering ambiguity (Salesforce doesn't guarantee the order multiple triggers on one object execute).
+
+Example:
+  // OpportunityTrigger.trigger
+  trigger OpportunityTrigger on Opportunity (before insert, before update, after insert, after update) {
+      OpportunityTriggerHandler handler = new OpportunityTriggerHandler();
+      if (Trigger.isBefore && Trigger.isInsert) handler.beforeInsert(Trigger.new);
+      if (Trigger.isBefore && Trigger.isUpdate) handler.beforeUpdate(Trigger.new, Trigger.oldMap);
+      if (Trigger.isAfter && Trigger.isInsert) handler.afterInsert(Trigger.new);
+      if (Trigger.isAfter && Trigger.isUpdate) handler.afterUpdate(Trigger.new, Trigger.oldMap);
+  }
+
+Bulkification in Apex Triggers:
+Triggers always receive lists of records (never a single record), even if only one record is being saved. Always write triggers to handle 200 records at a time.
+
+Anti-pattern (fails with bulk data):
+  for (Opportunity opp : Trigger.new) {
+      Account acc = [SELECT Id, Name FROM Account WHERE Id = :opp.AccountId]; // SOQL inside loop!
+  }
+
+Correct pattern:
+  Set<Id> accountIds = new Set<Id>();
+  for (Opportunity opp : Trigger.new) { accountIds.add(opp.AccountId); }
+
+  Map<Id, Account> accountMap = new Map<Id, Account>(
+      [SELECT Id, Name FROM Account WHERE Id IN :accountIds]
+  );
+
+  for (Opportunity opp : Trigger.new) {
+      Account acc = accountMap.get(opp.AccountId);
+      // do something with acc
+  }
+
+Trigger Recursion:
+If a trigger updates a record and that update triggers the same trigger again, you can enter an infinite loop. Prevent this with a static Boolean flag in a helper class:
+
+  public class TriggerHelper {
+      public static Boolean hasRun = false;
+  }
+
+  // In trigger: check before running, set flag after
+  if (!TriggerHelper.hasRun) {
+      TriggerHelper.hasRun = true;
+      // trigger logic here
+  }
+
+
+ORDER OF EXECUTION IN SALESFORCE
+----------------------------------
+
+When a record is saved in Salesforce, the following steps execute in order. Understanding this is critical for debugging unexpected behavior:
+
+1. Load the original record from the database (or initialize for new records)
+2. Apply field defaults and standard field values
+3. Execute system validation (required fields, field type enforcement, layout rules)
+4. Execute all Before Flow (Before-Save Record-Triggered Flows)
+5. Execute all Before Triggers (before insert / before update)
+6. Run system validation again and custom validation rules
+7. Save the record to the database (but do not commit — still in same transaction)
+8. Execute all After Triggers (after insert / after update)
+9. Execute After-Save Record-Triggered Flows
+10. Execute Assignment Rules (Leads, Cases)
+11. Execute Auto-Response Rules (Cases, Leads)
+12. Execute Workflow Rules (legacy — field updates, tasks, email alerts)
+13. If workflow field updates occurred: re-execute before triggers and validation rules (only once)
+14. Execute Escalation Rules (Cases)
+15. Execute Processes (Process Builder — legacy)
+16. Execute Criteria-Based Sharing Evaluation
+17. Commit the transaction to the database
+18. Execute Post-Commit logic (Apex @future, outbound messages, email sending)
+
+Key takeaways:
+- Before Flows run BEFORE Before Triggers — use Before Flows for simple field defaults, they're faster
+- Validation rules run after Before triggers, so triggers can set field values before validation
+- Workflow field updates cause triggers to run again (once) — be aware of this potential double-run
+- After-Save Flows run AFTER After Triggers
+- @future methods and outbound messages only run AFTER the full transaction commits
+
+
+APPROVAL PROCESSES
+-------------------
+
+An Approval Process is a workflow for requiring a manager or team to review and approve a record before it can proceed. Common for: contracts, discounts, expense reports, job requisitions.
+
+Components of an Approval Process:
+- Entry Criteria: Conditions that must be true for the process to be triggered
+- Approval Steps: One or more sequential or parallel approval stages
+- Approver: Who must approve at each step (specific user, user's manager, queue, related user field)
+- Initial Submission Actions: What happens when the record is submitted (e.g., lock the record, change status to "Pending Approval")
+- Approval Actions: What happens when approved (e.g., change status to "Approved", send email, update field)
+- Rejection Actions: What happens when rejected (e.g., change status to "Rejected", unlock record, notify submitter)
+- Recall Actions: What happens if the submitter recalls the submission
+
+Lock Behavior:
+When a record enters an approval process, it is typically locked (cannot be edited) until approved, rejected, or recalled. This prevents changes during the review.
+
+Delegation:
+Approvers can delegate approval authority to another user (e.g., when on vacation).
+
+Email Approval:
+Approvers can approve or reject directly from an email notification without logging into Salesforce.
+
+Multi-Step Approval:
+Steps can be sequential (Step 1 must be approved before Step 2 starts) or parallel (multiple approvers can act simultaneously — approval requires all to approve or a majority).
+
+Best Practices:
+- Use Approval Processes for human review workflows — don't try to replicate with Flow
+- Keep steps simple — complex logic belongs in Apex actions attached to approval steps
+- Always configure Rejection Actions to notify the submitter and explain the path forward
+- Use "Manager" as the approver to make the process scalable (not a specific named user)
+- Test with multiple scenarios: approval, rejection, recall, and delegation
+
+
+PROCESS BUILDER (LEGACY)
+--------------------------
+
+Process Builder was Salesforce's previous generation of declarative automation. It is now in maintenance mode — Salesforce is not adding new features to it and recommends migrating all Process Builder automations to Flow.
+
+Process Builder can:
+- Trigger on record creation or update
+- Trigger when invoked by another process
+- Create records, update fields, call Apex, launch flows, post to Chatter, send emails
+
+Why it is being replaced by Flow:
+- Flow is more powerful (loops, data manipulation, subflows, complex logic)
+- Flow has better performance and error handling
+- Process Builder cannot handle many scenarios without calling Apex
+- Multiple Process Builders on one object can cause unpredictable execution order
+
+Migration path: Salesforce provides a "Migrate to Flow" tool in Setup that automatically converts simple Process Builders to Record-Triggered Flows.
+
+If you encounter Process Builder in an existing org: don't add new logic to it; migrate the existing logic to Flow first, then retire the Process Builder.
+
+
+COMMON AUTOMATION PATTERNS AND ANTI-PATTERNS
+----------------------------------------------
+
+Patterns (Good Practices):
+
+Pattern 1: Before-Save Flow for Field Defaults
+Use a Before-Save Record-Triggered Flow to set field defaults and computed values on the same record. Faster than After-Save and uses no DML.
+
+Pattern 2: Trigger Handler Pattern
+Use one trigger per object that delegates to a handler class. Makes testing easier (you can call handler methods directly in unit tests) and keeps trigger code minimal.
+
+Pattern 3: Platform Event for Decoupling
+When Process A needs to trigger Process B, but they shouldn't share a transaction, publish a Platform Event. This decouples the processes, allows retry on failure, and makes the architecture more resilient.
+
+Pattern 4: Queueable Apex for Async Operations
+HTTP callouts to external systems must be asynchronous. Use Queueable Apex (preferred over @future) — it allows chaining, accepts complex data types, and can be monitored.
+
+Pattern 5: Scheduled Batch for Large Data Processing
+For operations on millions of records, use Batch Apex (implements Database.Batchable). It processes records in chunks of 200 and has its own governor limits per chunk.
+
+Anti-Patterns (Things to Avoid):
+
+Anti-Pattern 1: SOQL / DML Inside Loops
+The most common governor limit violation. Always collect IDs, do one bulk SOQL query, process results in memory, collect DML operations, then execute one bulk DML.
+
+Anti-Pattern 2: Multiple Triggers on One Object
+Creates unpredictable execution order and hard-to-debug interactions. Always use one trigger per object with a handler class.
+
+Anti-Pattern 3: Hard-Coding User IDs or Record IDs in Automation
+If you hardcode a specific user ID in a flow or trigger (e.g., as an approver or assignee), the automation breaks when that user is deactivated. Use Custom Labels, Custom Metadata Types, or Custom Settings to store configurable values.
+
+Anti-Pattern 4: Overlapping Flow and Trigger Logic
+If both a Flow and a Trigger update the same field on the same event, you have unpredictable behavior and double-writes. Pick one automation layer per responsibility.
+
+Anti-Pattern 5: Giant "God" Flows
+A single flow that handles every business scenario for an object becomes impossible to maintain. Break complex scenarios into focused, single-purpose flows or subflows.
+
+Anti-Pattern 6: Launching Asynchronous Apex from Triggers Unconditionally
+@future methods cannot be called from within another @future context. If a trigger fires during a batch job, and the trigger calls @future, it will fail. Always check: if (!System.isFuture() && !System.isBatch()) before calling @future.

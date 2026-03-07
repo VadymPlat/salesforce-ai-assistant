@@ -1,0 +1,284 @@
+SALESFORCE SECURITY MODEL
+==========================
+
+The Salesforce security model is a layered system that controls what users can see and do at every level — from the entire org down to individual fields and records. Understanding these layers is essential for designing secure, compliant Salesforce implementations.
+
+The layers, from broadest to most granular, are:
+  1. Organisation-Wide Defaults (OWD) — baseline record access for all users
+  2. Role Hierarchy — vertical sharing based on reporting structure
+  3. Sharing Rules — horizontal sharing across peer groups
+  4. Manual Sharing — one-off record-level grants
+  5. Profiles — what objects and fields a user can interact with
+  6. Permission Sets — additive permissions on top of a profile
+  7. Field-Level Security — which fields are visible/editable per user
+
+A user's effective access to a record is the UNION of all sharing mechanisms — whichever grant gives the most access wins. However, object-level and field-level security is always enforced regardless of sharing.
+
+
+PROFILES
+--------
+
+What is a Profile?
+A Profile is the foundational security assignment every Salesforce user must have. It defines the baseline of what a user can see and do across the entire org. Think of it as the "floor" of a user's permissions.
+
+What a Profile Controls:
+- Object permissions: Read, Create, Edit, Delete, View All, Modify All for each object
+- Field-level security: Read/Edit access to individual fields on each object
+- App visibility: which apps appear in the App Launcher
+- Tab visibility: which tabs are visible in the navigation bar
+- Record type access: which record types a user can create
+- Page layout assignment: which layout a user sees for each object/record type
+- System permissions: e.g., "API Enabled", "Manage Users", "View Setup and Configuration"
+- Login hours and IP restrictions: when and from where users can log in
+- Apex class and Visualforce page access
+
+Standard Profiles:
+Salesforce ships with several standard profiles that cannot be deleted but can be cloned:
+- System Administrator: full access to everything including setup
+- Standard User: basic CRM access, cannot modify setup
+- Read Only: can view records but not edit
+- Chatter Free/External: for community/partner access with minimal licensing
+- Minimum Access – Salesforce: the most restrictive standard profile, a good starting point for custom profiles
+
+Profile Best Practices:
+- Use the "Minimum Access – Salesforce" profile as a base and layer Permission Sets on top (the "profile + permission set" model)
+- Avoid giving too many users the System Administrator profile
+- Clone standard profiles rather than using them directly — this prevents unexpected changes when Salesforce updates them
+- Avoid having too many custom profiles (over 50 is a red flag); use Permission Sets for variation
+- Audit profiles regularly with the Profile Comparison tool in Setup
+
+The Modern Approach — Profile Minimalism:
+Salesforce recommends a shift toward a single, minimal profile (Minimum Access) per license type, with all permissions delivered via Permission Sets. This makes permissions easier to audit and assign without creating a proliferation of nearly identical profiles.
+
+
+PERMISSION SETS
+---------------
+
+What is a Permission Set?
+A Permission Set is a collection of settings and permissions that grants users additional access beyond what their profile provides. Unlike profiles, permission sets are additive — they can only grant permissions, never revoke them.
+
+A single user can have multiple permission sets assigned simultaneously.
+
+What Permission Sets Can Control:
+- Object permissions (same controls as profiles)
+- Field-level security
+- System permissions
+- App and tab visibility
+- Apex class and Visualforce page access
+- Custom permissions
+
+Common Use Cases:
+- Give a small group of users access to a specific object or feature without creating a new profile
+- Grant temporary elevated access (e.g., during a migration project)
+- Enable feature-specific access like "Marketing Tools" or "Admin Utilities"
+
+Permission Set Groups:
+A Permission Set Group bundles multiple Permission Sets together so they can be assigned as one unit. This simplifies administration when a role requires a combination of permissions.
+
+Example:
+  "Sales Manager" Permission Set Group might include:
+    - "Sales Core Access" permission set
+    - "Forecasting Access" permission set
+    - "Reports and Dashboards Access" permission set
+
+Muting Permission Sets:
+Within a Permission Set Group, you can add a "Muting Permission Set" to remove specific permissions that would otherwise be granted by one of the included sets. This provides fine-grained control without needing to modify the underlying permission sets.
+
+Best Practices for Permission Sets:
+- Name permission sets by the capability they grant, not by the user type (e.g., "Can Edit Opportunity Close Date" not "Sales Rep Extra Access")
+- Keep permission sets granular and single-purpose so they can be mixed and matched
+- Use Permission Set Groups to bundle sets for common roles
+- Use the Permission Set Assignment object to automate assignment via Flow or Apex
+- Document why each permission set exists and who should receive it
+
+
+OBJECT-LEVEL SECURITY (OLS)
+----------------------------
+
+Object-Level Security determines whether a user can interact with an object at all. It is configured in Profiles and Permission Sets.
+
+The six object permissions are:
+- Read: Can view existing records of this object
+- Create: Can create new records
+- Edit: Can modify existing records (requires Read)
+- Delete: Can delete records (requires Read and Edit)
+- View All: Can see all records of this object regardless of sharing settings (bypasses OWD and sharing rules)
+- Modify All: Can read, edit, delete, and transfer all records (bypasses sharing)
+
+"View All" and "Modify All" are powerful — they should only be granted to users who genuinely need org-wide visibility (e.g., data stewards, integration users).
+
+Object permissions work in combination with sharing settings. Even if OWD is "Private" (restricting record access), a user with "View All" on that object can still see every record.
+
+
+FIELD-LEVEL SECURITY (FLS)
+---------------------------
+
+Field-Level Security (FLS) controls whether a user can see or edit specific fields on an object, regardless of their record access.
+
+The two FLS settings per field are:
+- Visible: The user can see the field's value
+- Read-Only: The user can see but not edit the field
+
+Fields that are not marked "Visible" are completely hidden from the user — they don't appear in page layouts, list views, search results, or API responses.
+
+Important: Even if a page layout includes a field, FLS takes precedence. If a user's profile/permission set does not grant "Visible" access to a field, they cannot see it even if it's on their page layout.
+
+FLS and the API:
+FLS is enforced in most Salesforce contexts: Apex (with the "with sharing" keyword and SOQL using "WITH SECURITY_ENFORCED"), Lightning components, and standard UI. However, raw Apex code running "without sharing" does NOT enforce FLS automatically — developers must explicitly check FLS in code or use Schema.SObjectType methods.
+
+Best Practices for FLS:
+- Audit FLS as part of every security review — it's easy to overlook
+- Use the "Field Accessibility" view in Setup to see all profiles' FLS for a given field at once
+- Sensitive fields (e.g., SSN, salary, bank account) should have FLS locked to a small set of profiles/permission sets
+- Don't rely on page layout to hide sensitive data — use FLS
+
+
+RECORD-LEVEL SECURITY
+----------------------
+
+Record-Level Security determines which individual records a user can see, and is distinct from object/field security. Even if a user has Read access to Accounts, record-level security determines *which* Account records they can actually see.
+
+The mechanisms that control record access, in order of evaluation:
+  1. Organisation-Wide Defaults (OWD)
+  2. Role Hierarchy
+  3. Sharing Rules
+  4. Teams (Account Teams, Opportunity Teams)
+  5. Manual Sharing
+  6. Apex Managed Sharing
+  7. "View All" / "Modify All" object permissions (overrides everything)
+
+These are additive — each layer can only open up access, never restrict what a previous layer granted.
+
+
+ORGANISATION-WIDE DEFAULTS (OWD)
+----------------------------------
+
+OWD sets the baseline record visibility for all users who are not the record owner and have no other sharing grant. It answers the question: "By default, what can a random user see?"
+
+OWD settings per object:
+- Public Read/Write: Everyone can see and edit all records (no record-level restriction)
+- Public Read Only: Everyone can see all records, but only owners/admins can edit
+- Private: Only the record owner, their managers in the role hierarchy, and admins can access
+- Public Read/Write/Transfer: For Cases and Leads — also allows transferring ownership
+- Controlled by Parent: Used in Master-Detail relationships — the child record's access follows the parent's OWD
+
+Setting OWD Correctly:
+Start with the most restrictive setting that makes sense, then open up access with Role Hierarchy and Sharing Rules. It is easy to open up access but harder to restrict it once sharing rules are in place.
+
+Example:
+  - Opportunity OWD = Private: Reps only see their own opportunities
+  - Account OWD = Public Read Only: Everyone can see accounts but only owners edit them
+  - Case OWD = Private: Support reps only see their assigned cases
+
+
+ROLE HIERARCHY
+--------------
+
+The Role Hierarchy allows users higher up in the hierarchy to see records owned by users below them. It mirrors a company's reporting structure.
+
+How it works:
+- If a user's role is above another user's role in the hierarchy, they automatically get Read (and sometimes Edit) access to the lower user's records — as long as the object's OWD is not "Public Read/Write" (in that case, everyone already has access)
+- "Grant Access Using Hierarchies" must be enabled for an object (it is by default)
+
+Role vs Profile:
+- Profile = permissions (what you can do)
+- Role = data visibility (what records you can see based on ownership)
+
+Roles do not affect object or field permissions — only record visibility.
+
+Best Practices for Role Hierarchy:
+- Keep the hierarchy as flat as possible — deeply nested hierarchies are hard to maintain
+- Model roles after data visibility needs, not org chart titles (a VP might not need to see all reps' records)
+- Avoid creating roles for every individual — roles should represent positions/groups
+- Use "Private" OWD with role hierarchy for most sales orgs
+
+Example Role Hierarchy:
+  CEO
+  └── VP of Sales
+      ├── East Region Manager
+      │   ├── East Rep 1
+      │   └── East Rep 2
+      └── West Region Manager
+          ├── West Rep 1
+          └── West Rep 2
+
+VP of Sales can see records owned by all reps. East Region Manager can see records owned by East Rep 1 and East Rep 2 only.
+
+
+SHARING RULES
+-------------
+
+Sharing Rules extend access horizontally — to users who are not in the record owner's role hierarchy. They are evaluated after OWD and Role Hierarchy.
+
+There are two types:
+
+1. Ownership-Based Sharing Rules:
+   Grant access to records owned by members of a specific role, public group, or territory to members of another role, public group, or territory.
+
+   Example: "Share all Opportunities owned by the West Region role with the Marketing public group (Read Only)"
+
+2. Criteria-Based Sharing Rules:
+   Grant access based on field values on the record — not ownership.
+
+   Example: "Share all Accounts where Industry = 'Healthcare' with the Healthcare Specialist role (Read/Write)"
+
+Access levels available in sharing rules:
+- Read Only
+- Read/Write
+(You can never grant Delete access through sharing rules)
+
+Sharing Rule Limits:
+- Up to 300 sharing rules per object (50 criteria-based, 250 ownership-based)
+- Sharing rules are calculated in bulk — large numbers of rules can slow sharing recalculation
+
+Public Groups:
+Public Groups are named collections of users, roles, roles + subordinates, or other groups. They are used in sharing rules and manual sharing. Best practice: create public groups for logical business units (e.g., "All Sales Managers") and use them in sharing rules rather than pointing at individual roles.
+
+
+MANUAL SHARING
+--------------
+
+Manual Sharing allows record owners (and admins) to share individual records with specific users, groups, or roles on a one-off basis.
+
+How to use it:
+From a record's detail page → "Sharing" button → Add users/groups with Read Only or Read/Write access.
+
+Manual sharing is removed automatically if:
+- The record owner changes
+- The OWD is set to Public Read/Write (manual sharing is unnecessary and disappears)
+
+Manual sharing is appropriate for edge cases and exceptions, not as a primary sharing strategy. Over-reliance on manual sharing is a sign that the overall sharing model needs redesign.
+
+Apex Managed Sharing:
+Developers can create and manage sharing programmatically using Apex by inserting records into the object's Share object (e.g., AccountShare, OpportunityShare). This gives full control over sharing and persists through ownership changes (unlike manual sharing). The "Row Cause" for Apex managed sharing must be defined as a custom sharing reason.
+
+
+COMMON SECURITY MODEL PATTERNS
+--------------------------------
+
+Pattern 1: Private OWD + Role Hierarchy + Sharing Rules (Most Common for Sales Orgs)
+- OWD = Private for Opportunity and Account
+- Role hierarchy mirrors sales team structure
+- Sharing rules grant cross-regional visibility for specific use cases
+
+Pattern 2: Public Read Only + FLS for Sensitive Fields
+- Everyone can see Account records, but salary/credit fields are hidden via FLS
+- Avoids complex sharing while protecting sensitive data
+
+Pattern 3: Permission Set per Feature
+- One minimal profile for all users
+- Individual permission sets for: "Can View Forecasts", "Can Approve Contracts", "Can Export Reports"
+- Assigned via automated flows based on user attributes
+
+Pattern 4: Lockdown for Regulated Industries
+- OWD = Private for all objects
+- No role hierarchy visibility
+- Access granted only via explicit sharing rules or Apex managed sharing
+- All field access audited and documented
+
+Common Mistakes to Avoid:
+- Using "View All" / "Modify All" broadly — this bypasses sharing entirely
+- Relying on page layouts to hide sensitive fields (use FLS instead)
+- Having sharing rules that conflict or overlap, causing confusing access patterns
+- Not testing the security model as a non-admin user (use "Login As" or the Security Tester tool)
+- Forgetting that sharing rules do not override object-level permissions — a user needs at least "Read" on the object to benefit from sharing
