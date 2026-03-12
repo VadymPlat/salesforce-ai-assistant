@@ -5,10 +5,20 @@
 ![Claude](https://img.shields.io/badge/Claude-Opus%204.6-8A2BE2?logo=anthropic&logoColor=white)
 ![RAG](https://img.shields.io/badge/Architecture-RAG-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
+![Live Demo](https://img.shields.io/badge/Live%20Demo-salesforce--ai--assistant.streamlit.app-FF4B4B?logo=streamlit)
 
 A production-ready **Retrieval Augmented Generation (RAG)** application that answers questions about Salesforce by searching a curated knowledge base and generating intelligent, context-grounded responses using Anthropic's Claude Opus 4.6. Built as a portfolio project demonstrating end-to-end AI system design skills relevant to an AI/Cloud Architect role.
 
 > Ask it anything about Salesforce — security models, Apex triggers, Flow automation, data architecture, SOQL, governor limits — and get accurate, cited answers in real time.
+
+---
+
+## 🚀 Live Demo
+
+**[https://salesforce-ai-assistant.streamlit.app](https://salesforce-ai-assistant.streamlit.app)**
+
+> Live deployment on Streamlit Cloud. Click "Load / Reload Salesforce Docs"
+> in the sidebar to initialise the knowledge base, then ask any Salesforce question.
 
 ---
 
